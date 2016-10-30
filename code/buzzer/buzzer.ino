@@ -6,8 +6,7 @@
 //---------------------------------
 // Parameters
 //---------------------------------
-// Defines which buzzer code will run on - 0 = Reset, 1 = P1, 2 = P2
-int BUZZER_NUM = 0;
+
 
 //---------------------------------
 // Pin numbers
@@ -20,6 +19,13 @@ int PIN_MOSI = 11;
 int PIN_MISO = 12;
 int PIN_IRQ = 2;
 
+//These pins identify which buzzer is being used
+// 00 - Reset
+// 01 - Buzzer 1
+// 10 - Buzzer 2
+// 11 - Invalid
+int PIN_ID_H = 5;
+int PIN_ID_L = 6;
 
 //---------------------------------
 RF24 radio(PIN_CE, PIN_CSN);
@@ -31,7 +37,13 @@ byte baseAddress[6] = {"BASE"};
 int buttonState = 0;      // current state of button
 int lastButtonState = 0;  // previous state of button
 
+// Defines which buzzer code will run on - 0 = Reset, 1 = P1, 2 = P2
+int BUZZER_NUM;
+
 void setup() {
+  pinMode(PIN_ID_H, INPUT);
+  pinMode(PIN_ID_L, INPUT);
+  BUZZER_NUM = (digitalRead(PIN_ID_H) << 1) | digitalRead(PIN_ID_L);
   // Set button as input
   pinMode(PIN_BUTTON, INPUT);
 
