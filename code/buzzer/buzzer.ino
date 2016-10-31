@@ -3,6 +3,9 @@
 #include <RF24.h>
 #include <RF24_config.h>
 
+#include <avr/power.h>
+#include <avr/sleep.h>
+
 //---------------------------------
 // Parameters
 //---------------------------------
@@ -34,18 +37,45 @@ RF24 radio(PIN_CE, PIN_CSN);
 byte buttonAddress[][6] = {"RESET", "BUZZ1", "BUZZ2"};
 byte baseAddress[6] = {"BASE"};
 
-int buttonState = 0;      // current state of button
-int lastButtonState = 0;  // previous state of button
-
 // Defines which buzzer code will run on - 0 = Reset, 1 = P1, 2 = P2
 int BUZZER_NUM;
+
+volatile bool packetAvailable = 0;
+volatile bool buttonPressed = 0;
+
+//--------------------------------
+
+void sleep() {
+  // Set full power down and go to sleep.
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  // Enable interrupts to wake us up
+  attachInterrupt(0,rfInterrupt,LOW);
+  attachInterrupt(1,buttonInterrupt,LOW);
+  // Go to sleep
+  sleep_mode();
+  // Device is now asleep, and will be woken up by
+  // either button press or packet receipt.
+  sleep_disable();
+  // Disable interrupts during normal running code
+  detachInterrupt(0);
+  detachInterrupt(1);
+  power_all_enable();
+}
+
+void rfInterrupt() {
+  packetAvailable = 1;
+}
+
+void buttonInterrupt() {
+  buttonPressed = 1;
+}
 
 void setup() {
   pinMode(PIN_ID_H, INPUT);
   pinMode(PIN_ID_L, INPUT);
   BUZZER_NUM = (digitalRead(PIN_ID_H) << 1) | digitalRead(PIN_ID_L);
   // Set button as input
-  pinMode(PIN_BUTTON, INPUT);
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
 
   // Radio setup
   radio.begin();
@@ -57,17 +87,27 @@ void setup() {
 }
 
 void loop() {
-  // Check for button press
-  buttonState = digitalRead(PIN_BUTTON);
-  if (buttonState != lastButtonState)
+  // Process button press following interrupt
+  if (buttonPressed)
   {
-    if (buttonState == HIGH)
-    {
-      uint8_t payload = BUZZER_NUM;
-      radio.stopListening();
-      radio.write(&payload,sizeof(payload));
-      radio.startListening();
-    }
+    uint8_t payload = BUZZER_NUM;
+    radio.stopListening();
+    radio.write(&payload,sizeof(payload));
+    radio.startListening();
+    buttonPressed = 0;
+  }
+  else if (radio.available() || packetAvailable)
+  {
+    uint8_t payload;
+    radio.read(&payload,sizeof(payload));
+    // Process payload
+    packetAvailable = 0;
+  }
+  // Go back to sleep once button is released
+  // and there are no packets to handle
+  if ((digitalRead(PIN_BUTTON) == HIGH) && (!packetAvailable))
+  {
+    sleep();
   }
 
 }
